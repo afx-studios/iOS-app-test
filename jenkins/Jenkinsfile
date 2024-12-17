@@ -1,0 +1,59 @@
+pipeline {
+    agent { label 'mac' }
+    environment {
+        APP_NAME = 'ios-base'
+        SLACK_CHANNEL = '#ios-base'
+        S3_BUCKET = 'ios-base-files'
+        AWS_DEFAULT_REGION = 'us-east-1'
+        AWS_ACCESS_KEY_ID = credentials('aws-s3-access-key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-s3-secret-access-key')
+        APPLE_TEAM_ID = credentials('apple-team_id')
+        FASTLANE_USER = credentials('apple-user_id')
+        FASTLANE_PASSWORD = credentials('apple-user_password')
+        FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD = credentials('apple-app-specific_password')
+        FASTLANE_ITC_TEAM_ID = credentials('apple-itc-team_id')
+        SLACK_URL = credentials('slack-webhook_url')
+        SLACK_CHANNEL = '#ios-builds'
+    }
+    stages {
+        stage('bundle'){
+            steps{
+                sh 'sudo gem cleanup'
+                sh 'sudo bundle update'
+                sh 'bundle install --path ./vendor/bundle'
+            }
+        }                
+        stage('test'){
+            steps {
+                sh 'fastlane test_develop'
+            }
+        }
+        stage('package Debug'){
+            when {
+                branch 'qa' or branch 'develop'
+            }            
+            steps {
+                sh 'aws s3 cp s3://$S3_BUCKET/$APP_NAME/ . --recursive'
+                sh 'fastlane release_develop'
+            }
+        }
+        stage('package Staging'){
+            when {
+                branch 'staging'
+            }            
+            steps {
+                sh 'aws s3 cp s3://$S3_BUCKET/$APP_NAME/ . --recursive'
+                sh 'fastlane release_staging'
+            }
+        }
+        stage('release Production') {
+            when {
+                branch 'master'
+            }
+            steps {
+                sh 'aws s3 cp s3://$S3_BUCKET/$APP_NAME/ . --recursive'
+                sh 'fastlane release_production'
+            }
+        }
+    }
+}
